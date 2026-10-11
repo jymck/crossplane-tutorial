@@ -45,7 +45,7 @@ rm -f .env
 kind create cluster --config kind.yaml
 
 kubectl apply \
-    --filename https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+   --server-side --force-conflicts --validate=false --filename https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 
 ##############
 # Crossplane #
@@ -58,13 +58,13 @@ helm upgrade --install crossplane crossplane \
 kubectl apply \
     --filename providers/provider-kubernetes-incluster.yaml
 
-kubectl apply --filename providers/provider-helm-incluster.yaml
+kubectl apply --validate=false --filename providers/provider-helm-incluster.yaml
 
-kubectl apply --filename providers/dot-kubernetes.yaml
+kubectl apply --validate=false --filename providers/dot-kubernetes.yaml
 
-kubectl apply --filename providers/dot-sql.yaml
+kubectl apply --validate=false --filename providers/dot-sql.yaml
 
-kubectl apply --filename providers/dot-app.yaml
+kubectl apply --validate=false --filename providers/dot-app.yaml
 
 gum spin --spinner dot \
     --title "Waiting for Crossplane providers..." -- sleep 60
