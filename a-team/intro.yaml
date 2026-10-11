@@ -11,7 +11,7 @@ spec:
       cluster: aks
   parameters:
     nodeSize: small
-    minNodeCount: 3
+    minNodeCount: 2
     resourceGroupName: kml_rg_main-d858a6743d444d2e
     location: eastus
 ---
