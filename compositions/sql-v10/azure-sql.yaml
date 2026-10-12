@@ -45,9 +45,9 @@ spec:
         patches:
         - type: PatchSet
           patchSetName: metadata
-        - fromFieldPath: spec.parameters.resourceGroupName
+        - fromFieldPath: metadata.annotations[tutorial.crossplane.io/azure-resource-group]
           toFieldPath: spec.forProvider.resourceGroupName
-        - fromFieldPath: spec.parameters.location
+        - fromFieldPath: metadata.annotations[tutorial.crossplane.io/azure-location]
           toFieldPath: spec.forProvider.location
         - fromFieldPath: spec.claimRef.name
           toFieldPath: spec.forProvider.administratorLoginPasswordSecretRef.name
@@ -72,7 +72,7 @@ spec:
         patches:
         - type: PatchSet
           patchSetName: metadata
-        - fromFieldPath: spec.parameters.databaseName
+        - fromFieldPath: metadata.annotations[tutorial.crossplane.io/azure-database-name]
           toFieldPath: metadata.annotations[crossplane.io/external-name]
       - name: firewall-rule
         base:
@@ -87,3 +87,5 @@ spec:
         patches:
         - type: PatchSet
           patchSetName: metadata
+        - fromFieldPath: metadata.annotations[tutorial.crossplane.io/azure-resource-group]
+          toFieldPath: spec.forProvider.resourceGroupName

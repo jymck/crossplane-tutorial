@@ -217,14 +217,8 @@ else
   kubectl apply --filename compositions/sql-v10/definition.yaml
   kubectl apply --filename compositions/sql-v10/azure-sql.yaml
 
-  kubectl get compositeresourcedefinition compositeclusters.devopstoolkitseries.com --output yaml \
-    | yq '(.spec.versions[] | select(.name == "v1alpha1").schema.openAPIV3Schema.properties.spec.properties.parameters.properties.resourceGroupName) = {"type": "string"} | (.spec.versions[] | select(.name == "v1alpha1").schema.openAPIV3Schema.properties.spec.properties.parameters.properties.location) = {"type": "string"} | del(.metadata.creationTimestamp, .metadata.generation, .metadata.managedFields, .metadata.resourceVersion, .metadata.uid, .status)' \
-    | kubectl apply --filename -
-
-  kubectl wait --for=jsonpath='{.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.parameters.properties.resourceGroupName.type}'=string crd/clusterclaims.devopstoolkitseries.com --timeout=120s
-
   kubectl get composition cluster-azure --output yaml \
-    | yq 'del(.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").base.spec.forProvider.defaultNodePool[0].enableAutoScaling) | (.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").base.spec.forProvider.defaultNodePool[0].autoScalingEnabled) = true | (.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").base.spec.forProvider.defaultNodePool[0].maxCount) = 2 | (.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").patches[] | select(.toFieldPath == "spec.forProvider.defaultNodePool[0].vmSize").transforms[] | select(.type == "map").map.small) = "Standard_D2s_v3" | (.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").patches[] | select(.toFieldPath == "spec.forProvider.resourceGroupName").fromFieldPath) = "spec.parameters.resourceGroupName" | (.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").patches) += [{"fromFieldPath": "spec.parameters.location", "toFieldPath": "spec.forProvider.location"}] | del(.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "resourcegroup")) | del(.metadata.creationTimestamp, .metadata.generation, .metadata.managedFields, .metadata.resourceVersion, .metadata.uid, .status)' \
+    | yq 'del(.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").base.spec.forProvider.defaultNodePool[0].enableAutoScaling) | (.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").base.spec.forProvider.defaultNodePool[0].autoScalingEnabled) = true | (.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").base.spec.forProvider.defaultNodePool[0].maxCount) = 2 | (.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").patches[] | select(.toFieldPath == "spec.forProvider.defaultNodePool[0].vmSize").transforms[] | select(.type == "map").map.small) = "Standard_D2s_v3" | (.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").patches[] | select(.toFieldPath == "spec.forProvider.resourceGroupName").fromFieldPath) = "metadata.annotations[tutorial.crossplane.io/azure-resource-group]" | (.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").patches) += [{"fromFieldPath": "metadata.annotations[tutorial.crossplane.io/azure-location]", "toFieldPath": "spec.forProvider.location"}] | del(.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "resourcegroup")) | del(.metadata.creationTimestamp, .metadata.generation, .metadata.managedFields, .metadata.resourceVersion, .metadata.uid, .status)' \
     | kubectl apply --filename -
 
   echo "The Azure SQL Server and AKS compositions now target the supplied resource group and region. AKS will still create its Azure-managed node resource group separately." | gum format
@@ -236,6 +230,9 @@ apiVersion: devopstoolkitseries.com/v1alpha1
 kind: ClusterClaim
 metadata:
   name: cluster-01
+  annotations:
+    tutorial.crossplane.io/azure-resource-group: $AZURE_RESOURCE_GROUP
+    tutorial.crossplane.io/azure-location: $AZURE_LOCATION
 spec:
   id: cluster01
   compositionSelector:
@@ -243,8 +240,6 @@ spec:
       provider: azure
       cluster: aks
   parameters:
-    resourceGroupName: $AZURE_RESOURCE_GROUP
-    location: $AZURE_LOCATION
     nodeSize: small
     minNodeCount: 2
 ---
@@ -252,6 +247,10 @@ apiVersion: devopstoolkitseries.com/v1alpha1
 kind: SQLClaim
 metadata:
   name: silly-demo-db
+  annotations:
+    tutorial.crossplane.io/azure-resource-group: $AZURE_RESOURCE_GROUP
+    tutorial.crossplane.io/azure-location: $AZURE_LOCATION
+    tutorial.crossplane.io/azure-database-name: silly-demo
 spec:
   id: $DB_NAME
   compositionSelector:
@@ -259,9 +258,6 @@ spec:
       provider: azure
       db: mssql
   parameters:
-    resourceGroupName: $AZURE_RESOURCE_GROUP
-    location: $AZURE_LOCATION
-    databaseName: silly-demo
     version: \"12.0\"
     size: small
 ---

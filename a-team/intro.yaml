@@ -3,6 +3,9 @@ apiVersion: devopstoolkitseries.com/v1alpha1
 kind: ClusterClaim
 metadata:
   name: cluster-01
+  annotations:
+    tutorial.crossplane.io/azure-resource-group: kml_rg_main-41fa7b9cc04044dd
+    tutorial.crossplane.io/azure-location: eastus
 spec:
   id: cluster01
   compositionSelector:
@@ -10,8 +13,6 @@ spec:
       provider: azure
       cluster: aks
   parameters:
-    resourceGroupName: kml_rg_main-41fa7b9cc04044dd
-    location: eastus
     nodeSize: small
     minNodeCount: 2
 ---
@@ -19,6 +20,10 @@ apiVersion: devopstoolkitseries.com/v1alpha1
 kind: SQLClaim
 metadata:
   name: silly-demo-db
+  annotations:
+    tutorial.crossplane.io/azure-resource-group: kml_rg_main-41fa7b9cc04044dd
+    tutorial.crossplane.io/azure-location: eastus
+    tutorial.crossplane.io/azure-database-name: silly-demo
 spec:
   id: silly-demo-db-20261012052212
   compositionSelector:
@@ -26,9 +31,6 @@ spec:
       provider: azure
       db: mssql
   parameters:
-    resourceGroupName: kml_rg_main-41fa7b9cc04044dd
-    location: eastus
-    databaseName: silly-demo
     version: "12.0"
     size: small
 ---
@@ -44,7 +46,7 @@ spec:
       location: remote
   parameters:
     namespace: production
-    image: ghcr.io/jymck/crossplane-tutorial/azure-sql-demo:latest
+    image: ghcr.io/jymck/crossplane-tutorial/azure-sql-demo:sha-3aa9b2191848b84d9d1d0455d433ee9caec43e13
     port: 8080
     host: silly-demo.acme.com
     dbSecret:
