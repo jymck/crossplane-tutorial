@@ -33,23 +33,3 @@ spec:
   parameters:
     version: "12.0"
     size: small
----
-apiVersion: devopstoolkitseries.com/v1alpha1
-kind: AppClaim
-metadata:
-  name: silly-demo
-spec:
-  id: silly-demo
-  compositionSelector:
-    matchLabels:
-      type: backend-db
-      location: remote
-  parameters:
-    namespace: production
-    image: ghcr.io/jymck/crossplane-tutorial/azure-sql-demo:latest
-    port: 8080
-    host: silly-demo.acme.com
-    dbSecret:
-      name: silly-demo-db
-      namespace: a-team
-    kubernetesProviderConfigName: cluster01
