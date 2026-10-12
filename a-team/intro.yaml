@@ -15,21 +15,3 @@ spec:
   parameters:
     nodeSize: small
     minNodeCount: 2
----
-apiVersion: devopstoolkitseries.com/v1alpha1
-kind: SQLClaim
-metadata:
-  name: silly-demo-db
-  annotations:
-    tutorial.crossplane.io/azure-resource-group: kml_rg_main-ef5f27518c334ba8
-    tutorial.crossplane.io/azure-location: eastus
-    tutorial.crossplane.io/azure-database-name: silly-demo
-spec:
-  id: silly-demo-db-20261012165713
-  compositionSelector:
-    matchLabels:
-      provider: azure
-      db: mssql
-  parameters:
-    version: "12.0"
-    size: small
