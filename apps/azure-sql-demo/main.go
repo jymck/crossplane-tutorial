@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"log"
 	"net"
 	"net/http"
@@ -122,7 +123,45 @@ func newHandler(store videoStore) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		_, _ = fmt.Fprintln(w, "This is a silly SQL Server demo")
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		databaseStatus := "Connected"
+		if err := store.ping(ctx); err != nil {
+			databaseStatus = "Unavailable"
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+		page := template.Must(template.New("home").Parse(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Silly Demo | SQL Server</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; background: #f3f6f8; color: #172b3a; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; }
+    main { width: min(640px, calc(100% - 40px)); padding: 36px; background: white; border: 1px solid #dce5eb; border-radius: 12px; box-shadow: 0 18px 50px #17384a14; }
+    h1 { margin: 0 0 8px; font-size: 2rem; }
+    p { line-height: 1.6; color: #4c6270; }
+    .status { display: inline-block; margin: 20px 0; padding: 8px 12px; border-radius: 999px; background: #e5f6ed; color: #17643b; font-weight: 650; }
+    .status.bad { background: #fff0e8; color: #943b18; }
+    a { color: #075f8a; font-weight: 600; }
+    code { background: #eef3f6; padding: 3px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Silly Demo</h1>
+    <p>The backend is running with an Azure SQL database.</p>
+    <p class="status {{if eq .DatabaseStatus "Unavailable"}}bad{{end}}">Database: {{.DatabaseStatus}}</p>
+    <p><a href="/videos">View saved videos</a></p>
+    <p>Add a record with <code>POST /video?id=1&amp;title=hello</code>.</p>
+  </main>
+</body>
+</html>`))
+		if err := page.Execute(w, struct{ DatabaseStatus string }{DatabaseStatus: databaseStatus}); err != nil {
+			log.Printf("render home page: %v", err)
+		}
 	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)

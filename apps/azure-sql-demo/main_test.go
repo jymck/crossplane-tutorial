@@ -34,7 +34,7 @@ func TestRootAndHealth(t *testing.T) {
 
 	root := httptest.NewRecorder()
 	handler.ServeHTTP(root, httptest.NewRequest(http.MethodGet, "/", nil))
-	if root.Code != http.StatusOK || !strings.Contains(root.Body.String(), "SQL Server") {
+	if root.Code != http.StatusOK || root.Header().Get("Content-Type") != "text/html; charset=utf-8" || !strings.Contains(root.Body.String(), "Database: Connected") || !strings.Contains(root.Body.String(), `href="/videos"`) {
 		t.Fatalf("unexpected root response: status=%d body=%q", root.Code, root.Body.String())
 	}
 
@@ -49,6 +49,11 @@ func TestRootAndHealth(t *testing.T) {
 	handler.ServeHTTP(unhealthy, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	if unhealthy.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected unavailable status, got %d", unhealthy.Code)
+	}
+	rootUnavailable := httptest.NewRecorder()
+	handler.ServeHTTP(rootUnavailable, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rootUnavailable.Code != http.StatusServiceUnavailable || !strings.Contains(rootUnavailable.Body.String(), "Database: Unavailable") {
+		t.Fatalf("expected unavailable home page, got status=%d body=%q", rootUnavailable.Code, rootUnavailable.Body.String())
 	}
 }
 
