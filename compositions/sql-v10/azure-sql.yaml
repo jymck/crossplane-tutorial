@@ -65,9 +65,10 @@ spec:
               collation: SQL_Latin1_General_CP1_CI_AS
               licenseType: LicenseIncluded
               maxSizeGb: 2
+              storageAccountType: Local
               serverIdSelector:
                 matchControllerRef: true
-              skuName: Basic
+              skuName: S0
         patches:
         - type: PatchSet
           patchSetName: metadata

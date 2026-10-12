@@ -178,6 +178,13 @@ else
     AZURE_SQL_ADMIN_USERNAME=$(gum input --placeholder "Azure SQL admin username" --value "${AZURE_SQL_ADMIN_USERNAME:-sqladmin}")
     AZURE_SQL_ADMIN_PASSWORD=$(gum input --placeholder "Azure SQL admin password" --password)
 
+    AZURE_TENANT_ID=$(printf '%s' "$AZURE_TENANT_ID" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    AZURE_SUBSCRIPTION_ID=$(printf '%s' "$AZURE_SUBSCRIPTION_ID" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    AZURE_RESOURCE_GROUP=$(printf '%s' "$AZURE_RESOURCE_GROUP" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    AZURE_LOCATION=$(printf '%s' "$AZURE_LOCATION" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    AZURE_CLIENT_ID=$(printf '%s' "$AZURE_CLIENT_ID" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    AZURE_SQL_ADMIN_USERNAME=$(printf '%s' "$AZURE_SQL_ADMIN_USERNAME" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
     if [[ -z "$AZURE_TENANT_ID" || -z "$AZURE_SUBSCRIPTION_ID" || -z "$AZURE_RESOURCE_GROUP" || -z "$AZURE_LOCATION" || -z "$AZURE_CLIENT_ID" || -z "$AZURE_CLIENT_SECRET" || -z "$AZURE_SQL_ADMIN_USERNAME" || -z "$AZURE_SQL_ADMIN_PASSWORD" ]]; then
       echo "Azure tenant, subscription, resource group, location, app credentials, and SQL admin credentials are all required." >&2
       exit 1
