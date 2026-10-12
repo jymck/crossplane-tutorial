@@ -1,5 +1,11 @@
 ---
-
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: upbound-provider-azure-containerservice
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-containerservice:v2.8.0
+---
 apiVersion: pkg.crossplane.io/v1
 kind: Configuration
 metadata:

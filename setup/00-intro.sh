@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -e
 
 gum style \
@@ -26,8 +26,8 @@ echo "
 |Google Cloud CLI|If using Google Cloud|'https://cloud.google.com/sdk/docs/install'        |
 |AWS account with admin permissions|If using AWS|'https://aws.amazon.com'                  |
 |AWS CLI         |If using AWS         |'https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html'|
-|Azure account with admin permissions|If using Azure|'https://azure.microsoft.com'         |
-|az CLI          |If using Azure       |'https://learn.microsoft.com/cli/azure/install-azure-cli'|
+|Azure sandbox subscription and application credentials with resource permissions|If using Azure|'https://azure.microsoft.com'|
+|az CLI          |Optional; this intro setup uses supplied app credentials directly|'https://learn.microsoft.com/cli/azure/install-azure-cli'|
 
 If you are running this script from **Nix shell**, most of the requirements are already set with the exception of **Docker** and the **hyperscaler account**.
 " | gum format
@@ -42,7 +42,11 @@ rm -f .env
 # Control Plane Cluster #
 #########################
 
-kind create cluster --config kind.yaml
+if kind get clusters | grep --fixed-strings --line-regexp kind >/dev/null; then
+  echo 'Reusing existing Kind cluster "kind".'
+else
+  kind create cluster --config kind.yaml
+fi
 
 kubectl apply \
    --server-side --force-conflicts --validate=false --filename https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
@@ -53,6 +57,7 @@ kubectl apply \
 
 helm upgrade --install crossplane crossplane \
     --repo https://charts.crossplane.io/stable \
+  --version 1.20.13 \
     --namespace crossplane-system --create-namespace --wait
 
 kubectl apply \
@@ -71,6 +76,10 @@ gum spin --spinner dot \
 
 kubectl wait --for=condition=healthy provider.pkg.crossplane.io \
     --all --timeout=1800s
+
+kubectl wait --for=condition=healthy configuration.pkg.crossplane.io/crossplane-k8s --timeout=1800s
+kubectl wait --for=condition=healthy configuration.pkg.crossplane.io/crossplane-sql --timeout=1800s
+kubectl wait --for=condition=healthy configuration.pkg.crossplane.io/crossplane-app --timeout=1800s
 
 echo "## Which Hyperscaler do you want to use?" | gum format
 
@@ -161,16 +170,57 @@ aws_secret_access_key = $AWS_SECRET_ACCESS_KEY
 else
 
     AZURE_TENANT_ID=$(gum input --placeholder "Azure Tenant ID" --value "$AZURE_TENANT_ID")
+    AZURE_SUBSCRIPTION_ID=$(gum input --placeholder "Azure Subscription ID" --value "$AZURE_SUBSCRIPTION_ID")
+    AZURE_RESOURCE_GROUP=$(gum input --placeholder "Sandbox Resource Group" --value "$AZURE_RESOURCE_GROUP")
+    AZURE_LOCATION=$(gum input --placeholder "Azure region (for example, eastus)" --value "${AZURE_LOCATION:-eastus}")
+    AZURE_CLIENT_ID=$(gum input --placeholder "Application (Client) ID" --value "$AZURE_CLIENT_ID")
+    AZURE_CLIENT_SECRET=$(gum input --placeholder "Application Client Secret" --password)
+    AZURE_SQL_ADMIN_USERNAME=$(gum input --placeholder "Azure SQL admin username" --value "${AZURE_SQL_ADMIN_USERNAME:-sqladmin}")
+    AZURE_SQL_ADMIN_PASSWORD=$(gum input --placeholder "Azure SQL admin password" --password)
 
-    az login --tenant $AZURE_TENANT_ID
+    if [[ -z "$AZURE_TENANT_ID" || -z "$AZURE_SUBSCRIPTION_ID" || -z "$AZURE_RESOURCE_GROUP" || -z "$AZURE_LOCATION" || -z "$AZURE_CLIENT_ID" || -z "$AZURE_CLIENT_SECRET" || -z "$AZURE_SQL_ADMIN_USERNAME" || -z "$AZURE_SQL_ADMIN_PASSWORD" ]]; then
+      echo "Azure tenant, subscription, resource group, location, app credentials, and SQL admin credentials are all required." >&2
+      exit 1
+    fi
 
-    export SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+    printf 'export AZURE_TENANT_ID=%q\n' "$AZURE_TENANT_ID" >> .env
+    printf 'export AZURE_SUBSCRIPTION_ID=%q\n' "$AZURE_SUBSCRIPTION_ID" >> .env
+    printf 'export AZURE_RESOURCE_GROUP=%q\n' "$AZURE_RESOURCE_GROUP" >> .env
+    printf 'export AZURE_LOCATION=%q\n' "$AZURE_LOCATION" >> .env
+    printf 'export AZURE_CLIENT_ID=%q\n' "$AZURE_CLIENT_ID" >> .env
+    printf 'export AZURE_SQL_ADMIN_USERNAME=%q\n' "$AZURE_SQL_ADMIN_USERNAME" >> .env
+    export SUBSCRIPTION_ID="$AZURE_SUBSCRIPTION_ID"
 
-    az ad sp create-for-rbac --sdk-auth --role Owner --scopes /subscriptions/$SUBSCRIPTION_ID | tee azure-creds.json
+    (umask 077 && jq -n \
+      --arg clientId "$AZURE_CLIENT_ID" \
+      --arg clientSecret "$AZURE_CLIENT_SECRET" \
+      --arg subscriptionId "$AZURE_SUBSCRIPTION_ID" \
+      --arg tenantId "$AZURE_TENANT_ID" \
+      '{environmentName: "AzureCloud", clientId: $clientId, clientSecret: $clientSecret, subscriptionId: $subscriptionId, tenantId: $tenantId}' \
+      > azure-creds.json)
+    chmod 600 azure-creds.json
+    unset AZURE_CLIENT_SECRET
 
-    kubectl --namespace crossplane-system create secret generic azure-creds --from-file creds=./azure-creds.json
+    kubectl --namespace crossplane-system create secret generic azure-creds \
+      --from-file creds=./azure-creds.json --dry-run=client -o yaml \
+      | kubectl apply --filename -
 
     kubectl apply --filename providers/azure-config.yaml
+
+  kubectl apply --filename compositions/sql-v10/definition.yaml
+  kubectl apply --filename compositions/sql-v10/azure-sql.yaml
+
+  kubectl get compositeresourcedefinition compositeclusters.devopstoolkitseries.com --output yaml \
+    | yq '(.spec.versions[] | select(.name == "v1alpha1").schema.openAPIV3Schema.properties.spec.properties.parameters.properties.resourceGroupName) = {"type": "string"} | (.spec.versions[] | select(.name == "v1alpha1").schema.openAPIV3Schema.properties.spec.properties.parameters.properties.location) = {"type": "string"} | del(.metadata.creationTimestamp, .metadata.generation, .metadata.managedFields, .metadata.resourceVersion, .metadata.uid, .status)' \
+    | kubectl apply --filename -
+
+  kubectl wait --for=jsonpath='{.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.parameters.properties.resourceGroupName.type}'=string crd/clusterclaims.devopstoolkitseries.com --timeout=120s
+
+  kubectl get composition cluster-azure --output yaml \
+    | yq 'del(.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").base.spec.forProvider.defaultNodePool[0].enableAutoScaling) | (.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").base.spec.forProvider.defaultNodePool[0].autoScalingEnabled) = true | (.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").base.spec.forProvider.defaultNodePool[0].maxCount) = 2 | (.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").patches[] | select(.toFieldPath == "spec.forProvider.defaultNodePool[0].vmSize").transforms[] | select(.type == "map").map.small) = "Standard_D2s_v3" | (.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").patches[] | select(.toFieldPath == "spec.forProvider.resourceGroupName").fromFieldPath) = "spec.parameters.resourceGroupName" | (.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "aks").patches) += [{"fromFieldPath": "spec.parameters.location", "toFieldPath": "spec.forProvider.location"}] | del(.spec.pipeline[] | select(.step == "patch-and-transform").input.resources[] | select(.name == "resourcegroup")) | del(.metadata.creationTimestamp, .metadata.generation, .metadata.managedFields, .metadata.resourceVersion, .metadata.uid, .status)' \
+    | kubectl apply --filename -
+
+  echo "The Azure SQL Server and AKS compositions now target the supplied resource group and region. AKS will still create its Azure-managed node resource group separately." | gum format
 
     DB_NAME=silly-demo-db-$(date +%Y%m%d%H%M%S)
 
@@ -186,15 +236,10 @@ spec:
       provider: azure
       cluster: aks
   parameters:
+    resourceGroupName: $AZURE_RESOURCE_GROUP
+    location: $AZURE_LOCATION
     nodeSize: small
-    minNodeCount: 3
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: $DB_NAME-password
-data:
-  password: SVdpbGxOZXZlclRlbGxAMQ==
+    minNodeCount: 2
 ---
 apiVersion: devopstoolkitseries.com/v1alpha1
 kind: SQLClaim
@@ -205,9 +250,12 @@ spec:
   compositionSelector:
     matchLabels:
       provider: azure
-      db: postgresql
+      db: mssql
   parameters:
-    version: \"11\"
+    resourceGroupName: $AZURE_RESOURCE_GROUP
+    location: $AZURE_LOCATION
+    databaseName: silly-demo
+    version: \"12.0\"
     size: small
 ---
 apiVersion: devopstoolkitseries.com/v1alpha1
@@ -222,7 +270,7 @@ spec:
       location: remote
   parameters:
     namespace: production
-    image: c8n.io/vfarcic/silly-demo:1.4.52
+    image: ghcr.io/jymck/crossplane-tutorial/azure-sql-demo:latest
     port: 8080
     host: silly-demo.acme.com
     dbSecret:
@@ -233,7 +281,20 @@ spec:
 
 fi
 
-kubectl create namespace a-team
+kubectl create namespace a-team --dry-run=client -o yaml | kubectl apply --filename -
+
+if [[ "$HYPERSCALER" == "azure" ]]; then
+  SQL_APP_CREDENTIALS_FILE=$(mktemp)
+  chmod 600 "$SQL_APP_CREDENTIALS_FILE"
+  printf 'endpoint=%s.database.windows.net\nusername=%s\npassword=%s\nport=1433\n' \
+    "$DB_NAME" "$AZURE_SQL_ADMIN_USERNAME" "$AZURE_SQL_ADMIN_PASSWORD" \
+    > "$SQL_APP_CREDENTIALS_FILE"
+  kubectl --namespace a-team create secret generic silly-demo-db \
+    --from-env-file="$SQL_APP_CREDENTIALS_FILE" --dry-run=client -o yaml \
+    | kubectl apply --filename -
+  rm -f "$SQL_APP_CREDENTIALS_FILE"
+  unset AZURE_SQL_ADMIN_PASSWORD
+fi
 
 ###########
 # Argo CD #

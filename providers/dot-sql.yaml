@@ -1,5 +1,18 @@
 ---
-
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: upbound-provider-azure-dbforpostgresql
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-dbforpostgresql:v2.8.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: upbound-provider-azure-sql
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-sql:v2.8.0
+---
 apiVersion: pkg.crossplane.io/v1
 kind: Configuration
 metadata:

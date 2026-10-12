@@ -1,0 +1,88 @@
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: azure-sqlserver
+  labels:
+    provider: azure
+    db: mssql
+spec:
+  compositeTypeRef:
+    apiVersion: devopstoolkitseries.com/v1alpha1
+    kind: SQL
+  mode: Pipeline
+  pipeline:
+  - functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    step: patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      patchSets:
+      - name: metadata
+        patches:
+        - fromFieldPath: metadata.annotations
+          toFieldPath: metadata.annotations
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+      resources:
+      - name: server
+        base:
+          apiVersion: sql.azure.upbound.io/v1beta1
+          kind: MSSQLServer
+          spec:
+            forProvider:
+              administratorLogin: sqladmin
+              administratorLoginPasswordSecretRef:
+                key: password
+                name: ""
+                namespace: ""
+              location: eastus
+              minimumTlsVersion: "1.2"
+              publicNetworkAccessEnabled: true
+              resourceGroupName: ""
+              version: "12.0"
+        patches:
+        - type: PatchSet
+          patchSetName: metadata
+        - fromFieldPath: spec.parameters.resourceGroupName
+          toFieldPath: spec.forProvider.resourceGroupName
+        - fromFieldPath: spec.parameters.location
+          toFieldPath: spec.forProvider.location
+        - fromFieldPath: spec.claimRef.name
+          toFieldPath: spec.forProvider.administratorLoginPasswordSecretRef.name
+        - fromFieldPath: spec.claimRef.namespace
+          toFieldPath: spec.forProvider.administratorLoginPasswordSecretRef.namespace
+      - name: database
+        base:
+          apiVersion: sql.azure.upbound.io/v1beta1
+          kind: MSSQLDatabase
+          metadata:
+            annotations:
+              crossplane.io/external-name: ""
+          spec:
+            forProvider:
+              collation: SQL_Latin1_General_CP1_CI_AS
+              licenseType: LicenseIncluded
+              maxSizeGb: 2
+              serverIdSelector:
+                matchControllerRef: true
+              skuName: Basic
+        patches:
+        - type: PatchSet
+          patchSetName: metadata
+        - fromFieldPath: spec.parameters.databaseName
+          toFieldPath: metadata.annotations[crossplane.io/external-name]
+      - name: firewall-rule
+        base:
+          apiVersion: sql.azure.upbound.io/v1beta1
+          kind: MSSQLFirewallRule
+          spec:
+            forProvider:
+              endIpAddress: 0.0.0.0
+              serverIdSelector:
+                matchControllerRef: true
+              startIpAddress: 0.0.0.0
+        patches:
+        - type: PatchSet
+          patchSetName: metadata

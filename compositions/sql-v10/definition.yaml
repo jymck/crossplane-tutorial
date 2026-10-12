@@ -28,6 +28,15 @@ spec:
               parameters:
                 type: object
                 properties:
+                  resourceGroupName:
+                    description: Name of an existing Azure resource group for the database resources.
+                    type: string
+                  location:
+                    description: Azure region for the database server.
+                    type: string
+                  databaseName:
+                    description: Azure SQL database name.
+                    type: string
                   version:
                     description: The DB version depends on the DB type and versions available in the selected provider.
                     type: string
