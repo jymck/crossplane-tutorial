@@ -1,0 +1,53 @@
+---
+apiVersion: devopstoolkitseries.com/v1alpha1
+kind: ClusterClaim
+metadata:
+  name: cluster-01
+spec:
+  id: cluster01
+  compositionSelector:
+    matchLabels:
+      provider: azure
+      cluster: aks
+  parameters:
+    resourceGroupName: kml_rg_main-41fa7b9cc04044dd
+    location: eastus
+    nodeSize: small
+    minNodeCount: 2
+---
+apiVersion: devopstoolkitseries.com/v1alpha1
+kind: SQLClaim
+metadata:
+  name: silly-demo-db
+spec:
+  id: silly-demo-db-20261012052212
+  compositionSelector:
+    matchLabels:
+      provider: azure
+      db: mssql
+  parameters:
+    resourceGroupName: kml_rg_main-41fa7b9cc04044dd
+    location: eastus
+    databaseName: silly-demo
+    version: "12.0"
+    size: small
+---
+apiVersion: devopstoolkitseries.com/v1alpha1
+kind: AppClaim
+metadata:
+  name: silly-demo
+spec:
+  id: silly-demo
+  compositionSelector:
+    matchLabels:
+      type: backend-db
+      location: remote
+  parameters:
+    namespace: production
+    image: ghcr.io/jymck/crossplane-tutorial/azure-sql-demo:latest
+    port: 8080
+    host: silly-demo.acme.com
+    dbSecret:
+      name: silly-demo-db
+      namespace: a-team
+    kubernetesProviderConfigName: cluster01
